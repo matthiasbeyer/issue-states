@@ -32,6 +32,8 @@
 use std::error::Error as EError;
 use std::result::Result as RResult;
 
+use error::*;
+
 
 
 
@@ -120,5 +122,59 @@ pub trait ConditionFactory<C, E>
         neg: bool,
         val_op: Option<(MatchOp, &str)>
     ) -> RResult<C, E>;
+}
+
+
+
+
+/// Parse the bits of a condition atom
+///
+/// This method parses a condition atom. It returns the "metadata identifier"
+/// (e.g. the name of the piece of metadata), a flag indicating whether the
+/// condition is negated or not and, optionally, the matching operator and a
+/// string representation of the right-hand side value.
+///
+/// The matching operator and value may be `None`. In this case, the condition
+/// parsed is expected to check for the existence of a piece of metadata.
+///
+pub fn parse_condition(string: &str) -> Result<(&str, bool, Option<(MatchOp, &str)>)> {
+    if let Some(pos) = string.find(|ref c| reserved_char(c)) {
+        if pos == 0 {
+            // The condition is either a negated existance (e.g. starts with
+            // `!`) or invalid.
+            let (neg, name) = string.split_at(1);
+            return if neg == "!" && !name.contains(|ref c| reserved_char(c)) {
+                Ok((name, true, None))
+            } else {
+                Err(Error::from(ErrorKind::ConditionParseError))
+            }
+        }
+
+        let (name, mut op_val) = string.split_at(pos);
+        let negated = op_val.starts_with('!');
+        if negated {
+            op_val = op_val.split_at(1).1;
+        }
+        Ok((name, negated, parse_op_val(op_val)?.into()))
+    } else {
+        // If the string representation does not contain any reserved
+        // characters, this condition is the existance of the piece of metadata.
+        Ok((string, false, None))
+    }
+}
+
+
+/// Check whether a character is a reserved character
+///
+fn reserved_char(c: &char) -> bool {
+    ['!', '=', '<', '>', '~'].contains(c)
+}
+
+
+/// Parse and extract the match operator and value from the compound
+///
+fn parse_op_val(string: &str) -> Result<(MatchOp, &str)> {
+    // TODO: implement
+    Err(Error::from(ErrorKind::ConditionParseError))
 }
 
