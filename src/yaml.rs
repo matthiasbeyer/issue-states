@@ -73,11 +73,11 @@ pub type ParseResult<T> = RResult<T, scanner::ScanError>;
 ///
 pub fn parse_issue_states<R, C, F, E>(
     parser: &mut parser::Parser<R>,
-    mut cond_parse: F
+    cond_factory: F
 ) -> ParseResult<IssueStateSet<C>>
     where R: Iterator<Item = char>,
           C: condition::Condition + Sized,
-          F: FnMut(&str) -> RResult<C, E>,
+          F: condition::ConditionFactory<C, E>,
           E: Error
 {
     // Skip the beginning of the document
@@ -105,7 +105,7 @@ pub fn parse_issue_states<R, C, F, E>(
         let state = Arc::new(match parser.next()? {
             (parser::Event::SequenceEnd, _) => break, // We hit the end of the sequence
             (parser::Event::Scalar(name, _, _, _), _) => state::IssueState::new(name),
-            (parser::Event::MappingStart(_), _) => parse_issue_state_map(parser, &retval, &mut cond_parse)?,
+            (parser::Event::MappingStart(_), _) => parse_issue_state_map(parser, &retval, &cond_factory)?,
             (_, marker) => return Err(scanner::ScanError::new(
                 marker,
                 "Expected issue state as either map or scalar"
@@ -124,11 +124,11 @@ pub fn parse_issue_states<R, C, F, E>(
 fn parse_issue_state_map<R, C, F, E>(
     parser: &mut parser::Parser<R>,
     existing_states: &state::IssueStateVec<C>,
-    cond_parse: &mut F
+    cond_factory: &F
 ) -> ParseResult<state::IssueState<C>>
     where R: Iterator<Item = char>,
           C: condition::Condition + Sized,
-          F: FnMut(&str) -> RResult<C, E>,
+          F: condition::ConditionFactory<C, E>,
           E: Error
 {
     let mut name = Default::default();
@@ -154,7 +154,14 @@ fn parse_issue_state_map<R, C, F, E>(
             },
             "conditions" => for item in StringIter::new(parser) {
                 let (cond, marker) = item?;
-                conditions.push(cond_parse(cond.as_str()).map_err(|err| {
+                let (name, neg, op) = condition::parse_condition(cond.as_str()).map_err(|err| {
+                    let s = err.to_string();
+                    scanner::ScanError::new(
+                        marker,
+                        s.as_str()
+                    )
+                } )?;
+                conditions.push(cond_factory.make_condition(name, neg, op).map_err(|err| {
                     let s = err.to_string();
                     scanner::ScanError::new(
                         marker,
@@ -314,15 +321,13 @@ enum SequenceParseState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test::TestCond;
-
-    use std::str::FromStr;
+    use test::{TestCond, TestCondFactory};
 
     // Convenience function for encapsulating boilerplate for each test
     //
     fn parse(s: &str) -> IssueStateSet<TestCond> {
         let mut parser = parser::Parser::new(s.chars());
-        parse_issue_states(&mut parser, FromStr::from_str)
+        parse_issue_states(&mut parser, TestCondFactory::default())
             .expect("Failed to parse document")
     }
 
