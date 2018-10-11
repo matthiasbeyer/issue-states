@@ -178,3 +178,18 @@ fn parse_op_val(string: &str) -> Result<(MatchOp, &str)> {
     Err(Error::from(ErrorKind::ConditionParseError))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(string: &str) -> (&str, bool, Option<(MatchOp, &str)>) {
+        parse_condition(string).expect("Failed to parse condition atom!")
+    }
+
+    #[test]
+    fn smoke() {
+        assert_eq!(parse("foo"), ("foo", false, None));
+        assert_eq!(parse("!foo"), ("foo", true, None));
+    }
+}
+
