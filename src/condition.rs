@@ -101,10 +101,11 @@ pub enum MatchOp {
 /// the function `make_condition()` will be supplied with the components of a
 /// condition.
 ///
-pub trait ConditionFactory<C, E>
-    where C: Condition + Sized,
-          E: EError
+pub trait ConditionFactory<C>
+    where C: Condition + Sized
 {
+    type Error : From<Error>;
+
     /// Create a condition from bits and pieces
     ///
     /// The condition will be assembled from the "metadata identifier" (e.g. the
@@ -121,7 +122,7 @@ pub trait ConditionFactory<C, E>
         name: &str,
         neg: bool,
         val_op: Option<(MatchOp, &str)>
-    ) -> RResult<C, E>;
+    ) -> RResult<C, Self::Error>;
 }
 
 
